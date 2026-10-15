@@ -104,7 +104,7 @@ Then `{"type":"smart","material":"blizzard_diffuse"}` resolves in any project, a
 | `edge_lo` / `edge_hi` | 0.52 / 0.8 | curvature window for the edge light (`lo` up = only the sharpest ridges); with a high-poly bake you can come down to 0.45 and push `edge` to 0.45 |
 | `edge_blur` | 10 | blur radius in texels at 1024 — raise to 12–20 on low-poly / sliver-heavy meshes |
 | `seam` / `seam_color` | 0.5 / `#3f444d` | outline inside each UV island border (`seam: 0` turns it off) |
-| `seam_width` | 8 | outline width in texels at 1024; 4-8 hand-inked, 12-20 soft rim |
+| `seam_width` | 0 | outline width in texels at 1024 — **0 = off**: the outline is drawn only when you set this above 0; 4-8 hand-inked, 12-20 soft rim |
 | `seam_soft` | 0.5 | 0 = crisp inked line, 1 = airbrushed edge |
 | `roughness` | 0.8 | matte albedo; the value ramp carries the form |
 | `cavity_rough` | 0.2 | extra roughness **added** in crevices (0 to disable); the Cavity layer sets `blend_modes: {roughness: "add"}` — without it the channel *replaces* roughness with 0..0.2 and creases go mirror-smooth |

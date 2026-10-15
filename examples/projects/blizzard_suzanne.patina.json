@@ -30,7 +30,8 @@
             "cavity_color": "#3d4149",
             "toplight_color": "#f8fafc",
             "edge_color": "#fff0d8",
-            "seam_color": "#3f444d"
+            "seam_color": "#3f444d",
+            "seam_width": 8
           }
         }
       ]

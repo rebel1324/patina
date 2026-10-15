@@ -28,7 +28,7 @@
         "edge_blur": { "default": 10, "doc": "blur radius in texels at 1024; widen thin lines on low-poly meshes" },
         "seam": { "default": 0.5, "doc": "0..1 outline inside the border of each UV island (0 = off)" },
         "seam_color": { "default": "#3f444d", "doc": "outline color: a dark in the same hue family, a step under `bottom` so it survives on the light half" },
-        "seam_width": { "default": 8, "doc": "outline width in texels at 1024 (scales with the set resolution)" },
+        "seam_width": { "default": 0, "doc": "outline width in texels at 1024 (scales with the set resolution); 0 = off - the outline is drawn only when this is set above 0" },
         "seam_soft": { "default": 0.5, "doc": "0 = crisp inked line, 1 = soft airbrushed edge" },
         "roughness": { "default": 0.8, "doc": "stylized matte roughness" },
         "cavity_rough": { "default": 0.2, "doc": "extra roughness added in crevices (0 disables); added, not replaced - see the blend_modes note on the Cavity layer" },

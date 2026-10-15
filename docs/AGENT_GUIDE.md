@@ -147,7 +147,7 @@ A mask is a stack of effects evaluated **bottom to top**, starting from black:
 | `dirt` | grime in crevices: `amount` |
 | `curvature` | `convex` / `concave` / `both` / `raw` |
 | `ao`, `cavity`, `thickness` | baked maps |
-| `uv_stroke` | outline inside the border of each UV island: `width` (texels at 1024), `softness` |
+| `uv_stroke` | outline inside the border of each UV island: `width` (texels at 1024, **0 = off**; the effect is skipped unless it is above 0), `softness` |
 | `gradient` | along an axis, `from`..`to` in bbox units (`"axis":"up"`) |
 | `direction` | faces pointing a direction (dust/snow/moss on top) |
 | `noise` | `fbm`, `perlin`, `value`, `ridged`, `turbulence`, `cells`, `voronoi`, `cracks`, `dots`, `white`, `rings` (wood rings around `axis`); 3D and seamless. `stretch` accepts `[x,y,z]` or a direction name such as `"up"` |
@@ -205,7 +205,7 @@ A mask is a stack of effects evaluated **bottom to top**, starting from black:
  "mask":[{"type":"uv_stroke","width":8,"softness":0.5}],"opacity":0.5}
 ```
 
-- `uv_stroke` is 1 on an island border and falls to 0 `width` texels inboard; it needs a bake of the mesh maps.
+- `uv_stroke` is 1 on an island border and falls to 0 `width` texels inboard; `width` defaults to 0 (disabled), and when it is above 0 it needs a bake of the mesh maps.
 - `softness: 0` is a crisp inked line, `softness: 1` airbrushed. Check it with `render --mode mask:outline`.
 
 **Only the bottom 30% gets mud**

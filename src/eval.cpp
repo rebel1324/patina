@@ -490,13 +490,15 @@ static void f_thickness(const Json& s, Ctx& c, float* out) {
 }
 // Outline inside the border of each UV island: 1 on the border, 0 `width` texels inboard.
 static void f_uv_stroke(const Json& s, Ctx& c, float* out) {
+  float width = s.numf("width", 0.f);                             // texels at 1024; <= 0 disables the stroke
+  if (width <= 0.f) { std::fill(out, out + c.n, 0.f); return; }
   const SampleSet& ss = *c.ss;
   if (ss.uv_border.empty()) {
     c.warn("uv_stroke needs a fresh bake of the mesh maps (bake) - evaluating as 0");
     std::fill(out, out + c.n, 0.f);
     return;
   }
-  float width = std::max(0.5f, s.numf("width", 8.f));            // texels at 1024
+  width = std::max(0.5f, width);
   float soft = clampf(s.numf("softness", 0.6f), 0.f, 1.f);        // 0 = hard line, 1 = fully soft
   float w = width * (float)ss.res / 1024.f;                       // scale with the set resolution
   float inner = w * (1.f - soft);
@@ -1060,7 +1062,7 @@ static const std::vector<FieldDef>& field_defs() {
       {"cavity", "mesh", "1 - ambient occlusion (crevices are 1).", {}, f_cavity},
       {"thickness", "mesh", "Baked thickness (1 = thick, 0 = thin parts).", {}, f_thickness},
       {"uv_stroke", "mesh", "Stroke inside the border of each UV island: a painted outline around the edge of the texture.",
-       {{"width", "8", "outline width in texels at 1024 (scales with the set resolution)"},
+       {{"width", "0", "outline width in texels at 1024 (scales with the set resolution); 0 or less disables the stroke"},
         {"softness", "0.6", "0 = hard line, 1 = fully soft falloff"}},
        f_uv_stroke},
       {"bake", "mesh", "Raw baked/geometric map.",
