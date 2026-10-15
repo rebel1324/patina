@@ -14,3 +14,7 @@ __pycache__/
 *.tmp*
 .DS_Store
 ci_work/
+
+# generated texture maps (render_*.sh output)
+textures/
+input/
