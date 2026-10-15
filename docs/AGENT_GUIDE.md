@@ -83,7 +83,9 @@ Layers are listed **bottom to top**: later layers paint over earlier ones.
  "enabled": true}
 ```
 
-- A layer only affects the channels it lists; everything else passes through.
+- A channel source with `range` under the default `normal` blend **replaces** the channel: `{"roughness":
+  {"type":"cavity","range":[0,0.12]}}` makes crevices mirror-smooth (0.0-0.12), not "rougher by 0.12".
+  Put `{"blend_modes": {"roughness": "add"}}` on the layer to accumulate onto the base value instead.
 - Channels:
 
   | Channel | Values |
@@ -145,6 +147,7 @@ A mask is a stack of effects evaluated **bottom to top**, starting from black:
 | `dirt` | grime in crevices: `amount` |
 | `curvature` | `convex` / `concave` / `both` / `raw` |
 | `ao`, `cavity`, `thickness` | baked maps |
+| `uv_stroke` | outline inside the border of each UV island: `width` (texels at 1024), `softness` |
 | `gradient` | along an axis, `from`..`to` in bbox units (`"axis":"up"`) |
 | `direction` | faces pointing a direction (dust/snow/moss on top) |
 | `noise` | `fbm`, `perlin`, `value`, `ridged`, `turbulence`, `cells`, `voronoi`, `cracks`, `dots`, `white`, `rings` (wood rings around `axis`); 3D and seamless. `stretch` accepts `[x,y,z]` or a direction name such as `"up"` |
@@ -194,6 +197,16 @@ A mask is a stack of effects evaluated **bottom to top**, starting from black:
 ```json
 {"id":"grip","channels":{"basecolor":"#1c1c1e","roughness":0.9},"mask":[{"type":"select","parts":["Handle*"]}]}
 ```
+
+**A painted outline around the edge of the texture** (UV island borders; also hides the seams)
+
+```json
+{"id":"outline","channels":{"basecolor":"#3a3550"},
+ "mask":[{"type":"uv_stroke","width":8,"softness":0.5}],"opacity":0.5}
+```
+
+- `uv_stroke` is 1 on an island border and falls to 0 `width` texels inboard; it needs a bake of the mesh maps.
+- `softness: 0` is a crisp inked line, `softness: 1` airbrushed. Check it with `render --mode mask:outline`.
 
 **Only the bottom 30% gets mud**
 
@@ -250,7 +263,9 @@ the surface, `[-0.5, 1]` leaves gaps.
 - MCP tool calls run concurrently. Texture many assets at once, one project each.
 - `batch(jobs=[{"command":"export","args":{"project":"a.patina.json"}}, ...], parallel=8)`.
   - CLI equivalent: `patina batch --do export a.patina.json b.patina.json -j 8`.
-- `variants` evaluates alternatives in parallel and returns one comparison image.
+- `variants` evaluates alternatives in parallel and returns one comparison image. It varies *layer*
+  edits only: the bake comes from the saved project, so comparing bake settings (`bake.normal.high`,
+  `bevel`, `cage`) needs an `edit` + `bake` per setting, or one project per setting.
 - Projects are independent files, so several agents can each own one; edits to one project are serialized.
 
 ## 10. Export presets

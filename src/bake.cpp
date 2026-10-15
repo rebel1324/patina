@@ -706,6 +706,124 @@ float CurvatureField::at(vec3 p, vec3 n, float gain, uint32_t shell) const {
   return 0.5f + 0.5f * std::tanh(acc * norm * r_ * gain);
 }
 
+// ---------------------------------------------------------------- UV island border distance
+// Texel distance from every sample to the nearest border of its UV island. Feeds the `uv_stroke`
+// field. An edge is interior to an island only when two triangles agree on it in UV space *and* are
+// welded together in 3D. A UV seam, or two islands that merely touch in the layout, stays a border:
+// that is what keeps the outline continuous instead of dashed.
+struct UvEdgeKey {
+  uint64_t ua, ub;
+  uint32_t wa, wb;
+  bool operator==(const UvEdgeKey& o) const { return ua == o.ua && ub == o.ub && wa == o.wa && wb == o.wb; }
+};
+struct UvEdgeHash {
+  size_t operator()(const UvEdgeKey& k) const {
+    uint64_t h = (k.ua * 0x9e3779b97f4a7c15ull) ^ (k.ub * 0xc2b2ae3d27d4eb4full);
+    h = (h ^ k.wa) * 0x165667b19e3779f9ull;
+    return (size_t)((h ^ k.wb) * 0x2545f4914f6cdd1dull);
+  }
+};
+struct UvBorderEdges {
+  std::unordered_map<UvEdgeKey, uint8_t, UvEdgeHash> sharing;
+  std::vector<uint32_t> weld;  // vertex index -> position-welded id
+};
+
+static uint64_t uv_qkey(vec2 u) {
+  uint32_t a = (uint32_t)std::llround(u.x * 1e6), b = (uint32_t)std::llround(u.y * 1e6);
+  return ((uint64_t)a << 32) | b;
+}
+
+// Order the two endpoints consistently so the same edge hashes the same from both triangles.
+static UvEdgeKey uv_edge_key(uint64_t ua, uint64_t ub, uint32_t wa, uint32_t wb) {
+  return ua < ub ? UvEdgeKey{ua, ub, wa, wb} : UvEdgeKey{ub, ua, wb, wa};
+}
+
+static UvBorderEdges uv_border_edges(const Mesh& m) {
+  UvBorderEdges out;
+  out.weld = weld_by_position(m, nullptr);
+  out.sharing.reserve(m.tri_count() * 3);
+  for (size_t t = 0; t < m.tri_count(); t++)
+    for (int k = 0; k < 3; k++) {
+      uint64_t ua = uv_qkey(m.uv[m.idx[t * 3 + k]]), ub = uv_qkey(m.uv[m.idx[t * 3 + (k + 1) % 3]]);
+      uint32_t wa = out.weld[m.idx[t * 3 + k]], wb = out.weld[m.idx[t * 3 + (k + 1) % 3]];
+      if (ua == ub || wa == wb) continue;  // degenerate in UV or in 3D
+      out.sharing[uv_edge_key(ua, ub, wa, wb)]++;
+    }
+  return out;
+}
+
+static void bake_uv_border(const Mesh& m, const UvBorderEdges& edges, SampleSet& ss) {
+  int res = ss.res;
+  if (res <= 0 || ss.size() == 0) return;
+
+  // Rasterize this set's border edges into a zero set, then chamfer the distance.
+  const float kFar = (float)res * 4.f;
+  std::vector<float> dist((size_t)res * res, kFar);
+  auto at = [&](int x, int y) -> float& { return dist[(size_t)y * res + x]; };
+  auto plot = [&](int x, int y) {
+    // A 1-texel line is only half covered on the island side, which reads as dashes: seed a 3x3 block.
+    for (int dy = -1; dy <= 1; dy++)
+      for (int dx = -1; dx <= 1; dx++) {
+        int px = x + dx, py = y + dy;
+        if (px < 0 || py < 0 || px >= res || py >= res) continue;
+        at(px, py) = 0.f;
+      }
+  };
+  auto line = [&](vec2 ua, vec2 ub) {  // Bresenham in texel indices
+    int x0 = (int)std::floor(ua.x * res), y0 = (int)std::floor(ua.y * res);
+    int x1 = (int)std::floor(ub.x * res), y1 = (int)std::floor(ub.y * res);
+    int dx = std::abs(x1 - x0), dy = -std::abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy;
+    for (int guard = 0; guard < 4 * res + 16; guard++) {
+      plot(x0, y0);
+      if (x0 == x1 && y0 == y1) break;
+      int e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  };
+  for (size_t t = 0; t < m.tri_count(); t++) {
+    if (m.tri_set[t] != ss.set) continue;
+    vec2 uv[3] = {m.uv[m.idx[t * 3]], m.uv[m.idx[t * 3 + 1]], m.uv[m.idx[t * 3 + 2]]};
+    for (int k = 0; k < 3; k++) {
+      uint64_t ua = uv_qkey(uv[k]), ub = uv_qkey(uv[(k + 1) % 3]);
+      uint32_t wa = edges.weld[m.idx[t * 3 + k]], wb = edges.weld[m.idx[t * 3 + (k + 1) % 3]];
+      if (ua == ub || wa == wb) continue;
+      auto it = edges.sharing.find(uv_edge_key(ua, ub, wa, wb));
+      if (it != edges.sharing.end() && it->second > 1) continue;  // interior to the island
+      line(uv[k], uv[(k + 1) % 3]);
+    }
+  }
+
+  const float kDiag = 1.4142135f;
+  for (int y = 0; y < res; y++)
+    for (int x = 0; x < res; x++) {
+      float v = at(x, y);
+      if (x > 0) v = std::min(v, at(x - 1, y) + 1.f);
+      if (y > 0) {
+        v = std::min(v, at(x, y - 1) + 1.f);
+        if (x > 0) v = std::min(v, at(x - 1, y - 1) + kDiag);
+        if (x + 1 < res) v = std::min(v, at(x + 1, y - 1) + kDiag);
+      }
+      at(x, y) = v;
+    }
+  for (int y = res - 1; y >= 0; y--)
+    for (int x = res - 1; x >= 0; x--) {
+      float v = at(x, y);
+      if (x + 1 < res) v = std::min(v, at(x + 1, y) + 1.f);
+      if (y + 1 < res) {
+        v = std::min(v, at(x, y + 1) + 1.f);
+        if (x > 0) v = std::min(v, at(x - 1, y + 1) + kDiag);
+        if (x + 1 < res) v = std::min(v, at(x + 1, y + 1) + kDiag);
+      }
+      at(x, y) = v;
+    }
+
+  ss.uv_border.resize(ss.size());
+  parallel_for((int64_t)ss.size(), [&](int64_t b, int64_t e) {
+    for (int64_t i = b; i < e; i++) ss.uv_border[(size_t)i] = std::min(dist[(size_t)ss.texel[(size_t)i]], kFar);
+  });
+}
+
 // ---------------------------------------------------------------- disk cache
 static std::string cache_path(const std::string& dir, uint64_t key) { return path_join(dir, strf("bake-%016llx.bin", (unsigned long long)key)); }
 
@@ -720,8 +838,9 @@ static bool load_cache(const std::string& path, std::vector<SampleSet>& sets) {
     for (auto& ss : sets) {
       uint64_t n = 0, nn = 0;
       if (!rd(&n, 8) || n != ss.size()) return false;
-      ss.ao.resize(n); ss.thickness.resize(n); ss.curvature.resize(n);
+      ss.ao.resize(n); ss.thickness.resize(n); ss.curvature.resize(n); ss.uv_border.resize(n);
       if (!rd(ss.ao.data(), n * 4) || !rd(ss.thickness.data(), n * 4) || !rd(ss.curvature.data(), n * 4)) return false;
+      if (!rd(ss.uv_border.data(), n * 4)) return false;
       if (!rd(&nn, 8) || (nn != 0 && nn != n)) return false;
       ss.nmap.resize(nn); ss.nmiss.resize(nn);
       if (!rd(ss.nmap.data(), nn * sizeof(vec3)) || !rd(ss.nmiss.data(), nn)) return false;
@@ -731,7 +850,7 @@ static bool load_cache(const std::string& path, std::vector<SampleSet>& sets) {
   bool ok = load();
   fclose(f);
   if (!ok)  // a damaged file: leave no half-read maps behind
-    for (auto& ss : sets) { ss.ao.clear(); ss.thickness.clear(); ss.curvature.clear(); ss.nmap.clear(); ss.nmiss.clear(); }
+    for (auto& ss : sets) { ss.ao.clear(); ss.thickness.clear(); ss.curvature.clear(); ss.uv_border.clear(); ss.nmap.clear(); ss.nmiss.clear(); }
   return ok;
 }
 
@@ -752,6 +871,7 @@ static void save_cache(const std::string& path, const std::vector<SampleSet>& se
     wr(ss.ao.data(), n * 4);
     wr(ss.thickness.data(), n * 4);
     wr(ss.curvature.data(), n * 4);
+    wr(ss.uv_border.data(), n * 4);
     wr(&nn, 8);
     wr(ss.nmap.data(), nn * sizeof(vec3));
     wr(ss.nmiss.data(), nn);
@@ -828,7 +948,7 @@ std::shared_ptr<Baked> bake_mesh(std::shared_ptr<const Mesh> mesh, const std::ve
   bool want_gpu = device == BakeDevice::Gpu || (device == BakeDevice::Auto && texels >= kGpuMinTexels && Gpu::enabled());
 
   // bump when baker output changes so stale disk caches are never reused
-  static const uint64_t kBakerVersion = 7;
+  static const uint64_t kBakerVersion = 8;  // 8: cache files carry the uv_border map
   uint64_t key = fnv1a(&kBakerVersion, sizeof kBakerVersion, m.content_hash ^ s.hash());
   for (int r : res_per_set) key = fnv1a(&r, sizeof r, key);
   // the high poly and the cage count by their file contents; the high poly itself is only loaded for a real bake
@@ -893,6 +1013,12 @@ std::shared_ptr<Baked> bake_mesh(std::shared_ptr<const Mesh> mesh, const std::ve
       }
       stats.set("curvature_ms", t.ms());
       stats.set("curvature_edge_samples", (int64_t)field.sample_count());
+      t = Timer();
+      UvBorderEdges uv_edges = uv_border_edges(m);
+      parallel_for((int64_t)bk->sets.size(), 1, [&](int64_t b, int64_t e) {
+        for (int64_t i = b; i < e; i++) bake_uv_border(m, uv_edges, bk->sets[(size_t)i]);
+      });
+      stats.set("uv_border_ms", t.ms());
     };
     auto bake_traced = [&](Gpu* on) {
       GpuScene low;

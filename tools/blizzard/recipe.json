@@ -1,0 +1,47 @@
+{
+  "name": "blizzard_diffuse",
+  "about": "Standardized recipe for the Blizzard / WoW-style stylized diffuse (TexTools 'Paint Base'), expressed as Patina ops. Run with: node tools/blizzard/apply.mjs <project.patina.json>",
+  "material": "blizzard_diffuse",
+  "library_file": "library/blizzard.patina.json",
+  "layer_id": "blizzard",
+  "default_palette": "pearl",
+  "requires_bake": ["ao", "curvature"],
+  "ops": [
+    {
+      "op": "add",
+      "layer": {
+        "id": "blizzard",
+        "type": "smart",
+        "material": "blizzard_diffuse",
+        "params": {}
+      }
+    }
+  ],
+  "palettes": {
+    "lavender": { "top": "#b6adc2", "mid": "#8d90b0", "bottom": "#565372", "cavity_color": "#2f2d45", "toplight_color": "#e6ddcc", "edge_color": "#f2e9e0", "seam_color": "#3a3550" },
+    "steel":    { "top": "#b9c2cd", "mid": "#7f8b99", "bottom": "#4a5361", "cavity_color": "#262c36", "toplight_color": "#e4e9ee", "edge_color": "#f1f4f7", "seam_color": "#2b3038" },
+    "leather":  { "top": "#c2a184", "mid": "#8c6647", "bottom": "#4b342a", "cavity_color": "#241a15", "toplight_color": "#e8d8c2", "edge_color": "#f3e7d6", "seam_color": "#33241c" },
+    "blood":    { "top": "#c99089", "mid": "#8f4a45", "bottom": "#4d2326", "cavity_color": "#241013", "toplight_color": "#e9cfc4", "edge_color": "#f4ddd4", "seam_color": "#2e1618" },
+    "jade":     { "top": "#a9c9b2", "mid": "#6f9579", "bottom": "#3c5445", "cavity_color": "#1c2b22", "toplight_color": "#d8e8dc", "edge_color": "#eaf3ec", "seam_color": "#24332a" },
+    "ice":      { "top": "#cfe0ea", "mid": "#90a9bd", "bottom": "#55697c", "cavity_color": "#26333f", "toplight_color": "#e8f1f6", "edge_color": "#f3f8fb", "seam_color": "#2b3944" },
+    "bone":     { "top": "#e6e1d6", "mid": "#b7b1a5", "bottom": "#6f6a60", "cavity_color": "#403c34", "toplight_color": "#f7f3e9", "edge_color": "#fdfaf2", "seam_color": "#4d483f" },
+    "pearl":    { "top": "#eceef2", "mid": "#b6bac2", "bottom": "#6c7079", "cavity_color": "#3d4149", "toplight_color": "#f8fafc", "edge_color": "#fff0d8", "seam_color": "#3f444d" },
+    "slate":    { "top": "#cfd0d2", "mid": "#93959a", "bottom": "#4f5156", "cavity_color": "#2b2c2f", "toplight_color": "#eceef0", "edge_color": "#f6f7f8", "seam_color": "#36383c" }
+  },
+  "calibration": {
+    "notes": [
+      "top/mid/bottom stay in one hue family: only the value changes, plus a warm top / cool bottom shift. Cross-hue ramps read as airbrushed, not painted.",
+      "edge_lo/edge_hi/edge_blur are tuned for low-poly meshes (thin convex ridges). Raise edge_blur to 12-20 texels when the mesh is a fan-filled n-gon soup.",
+      "cavity_soft is the upper end of the window on the baked cavity map: 0.10 = hairline creases, 0.3-0.5 = soft fold shadows. A narrow window (0.08-0.14) clips the whole crease region to 1.0, so the bake's lattice staircase becomes hard triangular plateaus - widen it and blur (cavity_blur 8).",
+      "the Cavity layer must add its roughness, not replace it: blend_modes {roughness: add}. Without it a channel range [0, 0.12] writes 0.0-0.12 into every crease - mirror-polished folds, and a roughness map with std 0.29 instead of 0.03.",
+      "seam_* draws the painted outline inside each UV island border with the uv_stroke field: 4-8 texels at 1024 for a hand-inked edge, 12-20 for a soft airbrushed rim. It follows UV seams, so it also hides them.",
+      "roughness 0.8 keeps the albedo matte so the value ramp is what sells the shape; the studio HDRI still gives a satin sheen.",
+      "on a near-white albedo a white edge highlight is invisible: it lifts white onto white. Give edge_color a warm cast (#fff0d8) and put the contrast in hue instead of value - sun on white cloth.",
+      "curvature comes from the low poly unless bake.normal.high points at a dense mesh. With the low only, sliver triangles light up along their long edges as bright diagonals, so edge_lo has to stay high (0.52) and the highlight is coarse. Bake from a high poly and the map is clean: edge_lo 0.45 / edge 0.45 / edge_blur 8 reads as a crisp sunlit ridge with no breakup.",
+      "a high poly reaches the albedo mainly through AO (the cavity term), not through the edge light: switch cavity off in both bakes and high-vs-low basecolor collapses to 0.12/255 on input/sailor.glb. bake.normal.curvature is the knob that folds the dense mesh into the curvature field (8/255 at 1, 39/255 at 4 with curvature_gain 2; it clamps at 16), and the crease layer is what spends it: crease 0.55 / crease_lo 0.55 / crease_hi 0.85.",
+      "do not max the injection out. curvature 16 with curvature_gain 4 lifts the high-poly share of the albedo from 9 to 16.7/255, but the crease term (11/255) then reads as dirt rather than wrinkles; 4-8 at gain 2 is the last clean rung (input/ab_highpoly/ladder.sh). The rest of the dense mesh's detail belongs in the normal map.",
+      "white-grey ramps (bone / pearl / slate) carry the whole read on value alone: keep top near 0.9, mid near 0.72, bottom near 0.36 so the ramp still carves the form, and let seam_color sit a step darker than bottom so the outline survives on the light half."
+    ],
+    "verified_on": "input/skirt.glb (2244 tris, 5 UV islands, skirt_lp)"
+  }
+}

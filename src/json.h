@@ -4,6 +4,7 @@
 #include <vector>
 #include <utility>
 #include <cstdint>
+#include <type_traits>
 
 namespace pt {
 
@@ -14,12 +15,10 @@ class Json {
   Json() = default;
   Json(std::nullptr_t) {}
   Json(bool v) : t_(Bool), b_(v) {}
-  Json(int v) : t_(Number), n_(v) {}
-  Json(unsigned v) : t_(Number), n_(v) {}
-  Json(int64_t v) : t_(Number), n_((double)v) {}
-  Json(uint64_t v) : t_(Number), n_((double)v) {}
-  Json(long v) : t_(Number), n_((double)v) {}
-  Json(unsigned long v) : t_(Number), n_((double)v) {}
+  // One integral ctor covers every width on every data model (LP64 and LLP64 alike) without
+  // overloading int64_t against long, which are the same type on Linux/macOS.
+  template <typename T, typename std::enable_if<std::is_integral<T>::value && !std::is_same<T, bool>::value, int>::type = 0>
+  Json(T v) : t_(Number), n_(static_cast<double>(v)) {}
   Json(float v) : t_(Number), n_(v) {}
   Json(double v) : t_(Number), n_(v) {}
   Json(const char* v) : t_(String), s_(v) {}

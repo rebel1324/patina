@@ -488,6 +488,21 @@ static void f_thickness(const Json& s, Ctx& c, float* out) {
   const float* a = c.ss->thickness.data();
   par(c.n, [&](size_t i) { out[i] = a[i]; });
 }
+// Outline inside the border of each UV island: 1 on the border, 0 `width` texels inboard.
+static void f_uv_stroke(const Json& s, Ctx& c, float* out) {
+  const SampleSet& ss = *c.ss;
+  if (ss.uv_border.empty()) {
+    c.warn("uv_stroke needs a fresh bake of the mesh maps (bake) - evaluating as 0");
+    std::fill(out, out + c.n, 0.f);
+    return;
+  }
+  float width = std::max(0.5f, s.numf("width", 8.f));            // texels at 1024
+  float soft = clampf(s.numf("softness", 0.6f), 0.f, 1.f);        // 0 = hard line, 1 = fully soft
+  float w = width * (float)ss.res / 1024.f;                       // scale with the set resolution
+  float inner = w * (1.f - soft);
+  const float* d = ss.uv_border.data();
+  par(c.n, [&](size_t i) { out[i] = d[i] >= w ? 0.f : 1.f - smoothstep(inner, w, d[i]); });
+}
 
 static void f_bake(const Json& s, Ctx& c, float* out) {
   std::string map = to_lower(s.str("map", "ao"));
@@ -1044,6 +1059,10 @@ static const std::vector<FieldDef>& field_defs() {
       {"ao", "mesh", "Baked ambient occlusion (1 = open, 0 = occluded).", {}, f_ao},
       {"cavity", "mesh", "1 - ambient occlusion (crevices are 1).", {}, f_cavity},
       {"thickness", "mesh", "Baked thickness (1 = thick, 0 = thin parts).", {}, f_thickness},
+      {"uv_stroke", "mesh", "Stroke inside the border of each UV island: a painted outline around the edge of the texture.",
+       {{"width", "8", "outline width in texels at 1024 (scales with the set resolution)"},
+        {"softness", "0.6", "0 = hard line, 1 = fully soft falloff"}},
+       f_uv_stroke},
       {"bake", "mesh", "Raw baked/geometric map.",
        {{"map", "\"ao\"", "ao | curvature | convexity | concavity | thickness | position_x|y|z (bbox 0..1) | normal_x|y|z | island | uv_u | uv_v"},
         {"seed", "0", "for island"}},

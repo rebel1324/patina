@@ -1,0 +1,40 @@
+{
+  "patina": 1,
+  "mesh": "../assets/suzanne.glb",
+  "resolution": 2048,
+  "height_depth": 0.005,
+  "bake": {
+    "ao_samples": 48,
+    "ao_distance": 0.30000001192092896,
+    "thickness_samples": 16,
+    "thickness_distance": 0.30000001192092896,
+    "curvature_radius": 0.012000000104308128,
+    "curvature_gain": 1,
+    "curvature_min_angle": 1.5
+  },
+  "export": {
+    "preset": "blender",
+    "dir": "textures/blizzard_suzanne"
+  },
+  "texture_sets": {
+    "Skin": {
+      "layers": [
+        {
+          "id": "blizzard",
+          "type": "smart",
+          "material": "blizzard_diffuse",
+          "params": {
+            "top": "#eceef2",
+            "mid": "#b6bac2",
+            "bottom": "#6c7079",
+            "cavity_color": "#3d4149",
+            "toplight_color": "#f8fafc",
+            "edge_color": "#fff0d8",
+            "seam_color": "#3f444d"
+          }
+        }
+      ]
+    }
+  },
+  "name": "blizzard_suzanne"
+}

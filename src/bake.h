@@ -1,4 +1,4 @@
-// Mesh-map baking into UV space: surface samples per texel + AO, thickness, curvature.
+// Mesh-map baking into UV space: surface samples per texel + AO, thickness, curvature, UV border distance.
 #pragma once
 #include <functional>
 #include <memory>
@@ -73,6 +73,7 @@ struct SampleSet {
   std::vector<vec2> uv;
   std::vector<float> len_u, len_v;   // world length of one texel step along image x / y
   std::vector<float> ao, thickness, curvature;
+  std::vector<float> uv_border;  // texel distance to the nearest UV island border (0 = on the border)
   std::vector<vec3> nmap;       // baked tangent-space normal (MikkTSpace, +Y = OpenGL); empty = none
   std::vector<uint8_t> nmiss;   // 1 = no high-poly surface found (cage too tight or no matching part)
   std::vector<int32_t> pad;  // res*res -> nearest sample (padding / 2D neighborhood ops)

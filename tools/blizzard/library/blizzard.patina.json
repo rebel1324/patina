@@ -1,0 +1,109 @@
+{
+  "smart_materials": {
+    "blizzard_diffuse": {
+      "description": "Blizzard / WoW-style stylized diffuse (TexTools 'Paint Base'; defaults are the white-grey 'pearl' ramp): a vertical value ramp with a warm sunlit top and a cool ambient bottom, cavity darkening in creases, concave wrinkle creases read off the baked curvature, a top-light lift on upward faces, a clean convex edge highlight, and a painted outline inside the border of each UV island. Diffuse + roughness only: metallic stays 0, height stays neutral so it stays a game-ready albedo. The cavity and crease terms are what a high poly actually buys: bake with bake.normal.high plus bake.normal.curvature 4 and curvature_gain 2.",
+      "params": {
+        "top": { "default": "#eceef2", "doc": "ramp color at the top: lighter, a touch warmer, same hue family as mid" },
+        "mid": { "default": "#b6bac2", "doc": "the actual material color, sits at the middle of the ramp" },
+        "bottom": { "default": "#6c7079", "doc": "ramp color at the bottom: darker, cooler, same hue family as mid" },
+        "low": { "default": 0.04, "doc": "bbox height (0..1) where the bottom color lands" },
+        "high": { "default": 0.92, "doc": "bbox height (0..1) where the top color lands" },
+        "curve": { "default": 0.88, "doc": "gamma on the ramp; <1 pushes the light half up the silhouette" },
+        "cavity": { "default": 0.8, "doc": "0..1 strength of the crevice darkening (the AO/cavity term)" },
+        "cavity_color": { "default": "#3d4149", "doc": "color pulled into crevices; keep it cool and in the hue family" },
+        "cavity_soft": { "default": 0.3, "doc": "upper end of the cavity window: 0.10 hairline creases, 0.3-0.45 soft fold shadows (a narrow window saturates into flat plateaus)" },
+        "cavity_blur": { "default": 8, "doc": "blur radius in texels at 1024 applied to the cavity field before the window: kills the baked lattice staircase" },
+        "toplight": { "default": 0.14, "doc": "0..1 lift on upward-facing faces" },
+        "toplight_color": { "default": "#f8fafc", "doc": "color of the top light" },
+        "crease": { "default": 0.3, "doc": "0..1 concave crease darkening; this is the term that pays for a high poly - with only a low poly it has almost nothing to draw (0 to disable)" },
+        "crease_color": { "default": "#454a55", "doc": "crease color: a cool dark a step above cavity_color, so folds stay readable inside cavity shadow" },
+        "crease_lo": { "default": 0.3, "doc": "concave curvature where a crease starts (lower = even shallow wrinkles count; raise on a low-poly bake, whose concave field is sliver noise)" },
+        "crease_hi": { "default": 0.6, "doc": "concave curvature where a crease is full; keep the window wide - a narrow one clips to flat plateaus" },
+        "crease_blur": { "default": 6, "doc": "blur radius in texels at 1024 on the concave field before the window" },
+        "crease_rough": { "default": 0.15, "doc": "extra roughness added in creases (0 disables); added, not replaced" },
+        "edge": { "default": 0.2, "doc": "0..1 convex edge highlight strength" },
+        "edge_color": { "default": "#fff0d8", "doc": "color of the edge highlight; keep it warm, so it reads on light albedos where a white lift has no contrast" },
+        "edge_lo": { "default": 0.52, "doc": "curvature where the edge light starts (raise = only the sharpest ridges)" },
+        "edge_hi": { "default": 0.8, "doc": "curvature where the edge light is full" },
+        "edge_blur": { "default": 10, "doc": "blur radius in texels at 1024; widen thin lines on low-poly meshes" },
+        "seam": { "default": 0.5, "doc": "0..1 outline inside the border of each UV island (0 = off)" },
+        "seam_color": { "default": "#3f444d", "doc": "outline color: a dark in the same hue family, a step under `bottom` so it survives on the light half" },
+        "seam_width": { "default": 8, "doc": "outline width in texels at 1024 (scales with the set resolution)" },
+        "seam_soft": { "default": 0.5, "doc": "0 = crisp inked line, 1 = soft airbrushed edge" },
+        "roughness": { "default": 0.8, "doc": "stylized matte roughness" },
+        "cavity_rough": { "default": 0.2, "doc": "extra roughness added in crevices (0 disables); added, not replaced - see the blend_modes note on the Cavity layer" },
+        "seed": { "default": 0, "doc": "reserved for breakup noise" }
+      },
+      "layers": [
+        {
+          "id": "base",
+          "channels": {
+            "basecolor": {
+              "type": "gradient",
+              "axis": "up",
+              "from": "${low}",
+              "to": "${high}",
+              "gradient": ["${bottom}", "${mid}", "${top}"],
+              "power": "${curve}"
+            },
+            "roughness": "${roughness}",
+            "metallic": 0
+          }
+        },
+        {
+          "id": "cavity",
+          "name": "Cavity",
+          "channels": {
+            "basecolor": "${cavity_color}",
+            "roughness": { "type": "cavity", "range": [0, "${cavity_rough}"], "blend": "add" }
+          },
+          "blend_modes": { "roughness": "add" },
+          "mask": [
+            { "type": "cavity", "blur": "${cavity_blur}", "levels": [0.05, "${cavity_soft}"] }
+          ],
+          "opacity": "${cavity}"
+        },
+        {
+          "id": "crease",
+          "name": "Wrinkle creases",
+          "channels": {
+            "basecolor": "${crease_color}",
+            "roughness": { "type": "curvature", "mode": "concave", "range": [0, "${crease_rough}"], "blend": "add" }
+          },
+          "blend_modes": { "roughness": "add" },
+          "mask": [
+            { "type": "curvature", "mode": "concave", "blur": "${crease_blur}", "levels": ["${crease_lo}", "${crease_hi}"] }
+          ],
+          "opacity": "${crease}"
+        },
+        {
+          "id": "toplight",
+          "name": "Top light",
+          "channels": { "basecolor": "${toplight_color}" },
+          "mask": [
+            { "type": "direction", "direction": "up", "min": 0.1, "max": 0.85, "levels": [0, 1] }
+          ],
+          "opacity": "${toplight}"
+        },
+        {
+          "id": "edge",
+          "name": "Edge light",
+          "channels": { "basecolor": "${edge_color}" },
+          "mask": [
+            { "type": "curvature", "mode": "convex", "levels": ["${edge_lo}", "${edge_hi}"], "blur": "${edge_blur}" }
+          ],
+          "opacity": "${edge}"
+        },
+        {
+          "id": "seam",
+          "name": "Island outline",
+          "channels": { "basecolor": "${seam_color}" },
+          "mask": [
+            { "type": "uv_stroke", "width": "${seam_width}", "softness": "${seam_soft}" }
+          ],
+          "opacity": "${seam}"
+        }
+      ]
+    }
+  }
+}
